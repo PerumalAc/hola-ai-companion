@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Hola AI Companion - Your friendly AI conversation partner. Chat in Tamil, Tanglish, or English with warm, empathetic AI companions.">
+  <title>Hola AI Companion</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👋</text></svg>">
+</head>
+<body>
+
+  <!-- Background Particles -->
+  <div class="particles" id="particles"></div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- App Root -->
+  <div id="app">
+
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Logo -->
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <div class="logo-icon">👋</div>
+          <div>
+            <h1>Hola</h1>
+            <span class="tag">AI Companion</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Language Selector -->
+      <div class="lang-selector">
+        <button class="lang-btn active" data-lang="english" id="langEnglish">English</button>
+        <button class="lang-btn" data-lang="tamil" id="langTamil">தமிழ்</button>
+        <button class="lang-btn" data-lang="tanglish" id="langTanglish">Tanglish</button>
+      </div>
+
+      <!-- Companion Cards -->
+      <div class="companions-section">
+        <div class="companions-title">Your Companions</div>
+
+        <div class="companion-card active" data-companion="ananya" id="companionAnanya">
+          <div class="companion-avatar">
+            👩‍🦱
+            <span class="status-dot"></span>
+          </div>
+          <div class="companion-info">
+            <div class="companion-name">Ananya</div>
+            <div class="companion-desc">The Friendly Listener 💜</div>
+          </div>
+        </div>
+
+        <div class="companion-card" data-companion="kavin" id="companionKavin">
+          <div class="companion-avatar">
+            🧑‍🎨
+            <span class="status-dot"></span>
+          </div>
+          <div class="companion-info">
+            <div class="companion-name">Kavin</div>
+            <div class="companion-desc">The Creative Thinker 🎨</div>
+          </div>
+        </div>
+
+        <div class="companion-card" data-companion="adithya" id="companionAdithya">
+          <div class="companion-avatar">
+            🧘
+            <span class="status-dot"></span>
+          </div>
+          <div class="companion-info">
+            <div class="companion-name">Adithya</div>
+            <div class="companion-desc">The Calm Mentor 🌿</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" id="privacyBtn">
+          <span class="icon">🔒</span>
+          Privacy & Data
+        </button>
+        <button class="sidebar-footer-btn" id="exportBtn">
+          <span class="icon">📥</span>
+          Export Chat History
+        </button>
+        <button class="sidebar-footer-btn danger" id="clearAllBtn">
+          <span class="icon">🗑️</span>
+          Delete All Chats
+        </button>
+      </div>
+    </aside>
+
+    <!-- ═══ MAIN CHAT AREA ═══ -->
+    <main class="main-area">
+
+      <!-- Chat Header -->
+      <header class="chat-header">
+        <div class="chat-header-left">
+          <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+          <div class="chat-header-avatar" id="headerAvatar" style="background: linear-gradient(135deg, #f472b6, #a855f7);">
+            👩‍🦱
+          </div>
+          <div class="chat-header-info">
+            <h2 id="headerName">Ananya</h2>
+            <div class="status" id="headerStatus">Online • Ready to chat</div>
+          </div>
+        </div>
+        <div class="chat-header-right">
+          <button class="header-action-btn" id="voiceToggleBtn" title="Toggle Voice Mode">
+            🎤
+          </button>
+          <button class="header-action-btn" id="speakerToggleBtn" title="Toggle AI Voice">
+            🔊
+          </button>
+        </div>
+      </header>
+
+      <!-- Chat Messages Container -->
+      <div class="chat-messages" id="chatMessages">
+        <!-- Welcome Screen (shown initially) -->
+        <div class="welcome-screen" id="welcomeScreen">
+          <div class="welcome-emoji">👋</div>
+          <h2>Welcome to Hola!</h2>
+          <p>Choose a companion from the sidebar and start a meaningful conversation. Your chats are private and stored only on your device.</p>
+          <div class="welcome-features">
+            <div class="welcome-feature">
+              <span class="feat-icon">🗣️</span>
+              Voice & Text Chat
+            </div>
+            <div class="welcome-feature">
+              <span class="feat-icon">🌐</span>
+              Tamil, Tanglish, English
+            </div>
+            <div class="welcome-feature">
+              <span class="feat-icon">🔒</span>
+              100% Private
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Voice Visualizer -->
+      <div class="voice-visualizer" id="voiceVisualizer">
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+        <div class="voice-bar"></div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div class="typing-indicator" id="typingIndicator">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+
+      <!-- Chat Input Area -->
+      <div class="chat-input-area">
+        <div class="chat-input-wrapper">
+          <button class="input-action-btn" id="micBtn" title="Voice Input">
+            🎙️
+          </button>
+          <textarea id="chatInput" placeholder="Type your message..." rows="1"></textarea>
+          <button class="input-action-btn" id="sendBtn" title="Send Message">
+            ➤
+          </button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ═══ PRIVACY MODAL ═══ -->
+  <div class="modal-overlay" id="privacyModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>🔒 Privacy Dashboard</h2>
+        <button class="modal-close" id="privacyModalClose">✕</button>
+      </div>
+
+      <div class="privacy-info">
+        <h3>🛡️ Your Data is Safe</h3>
+        <p>All your conversations are stored locally in your browser's localStorage. Nothing is ever sent to external servers. Your chats are encrypted within your browser and fully under your control.</p>
+      </div>
+
+      <div class="privacy-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="statMessages">0</div>
+          <div class="stat-label">Messages</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statConversations">0</div>
+          <div class="stat-label">Sessions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statStorage">0 KB</div>
+          <div class="stat-label">Storage Used</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="modal-btn primary" id="modalExportBtn">
+          📥 Export Chat History (JSON)
+        </button>
+        <button class="modal-btn" id="modalExportTxtBtn">
+          📄 Export as Text File
+        </button>
+        <button class="modal-btn danger" id="modalDeleteBtn">
+          🗑️ Delete All Chat Data
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
