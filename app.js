@@ -896,52 +896,91 @@ function renderMessage(text, type, time, animate) {
 }
 
 function formatMessageText(text, container) {
-  const imgRegex = /!\[(.*?)\]\((.*?)\)/g;
-  let lastIndex = 0;
-  let match;
-  
-  const appendText = (txt) => {
-    if (txt) {
-      const textSpan = document.createElement('span');
-      textSpan.innerHTML = txt.replace(/\n/g, '<br>');
-      container.appendChild(textSpan);
-    }
+  // 1. Separate code blocks to prevent parsing markdown within code
+  const codeBlocks = [];
+  let placeholderText = text.replace(/```([\s\S]*?)```/g, (match, code) => {
+    const id = `__CODE_BLOCK_${codeBlocks.length}__`;
+    codeBlocks.push(code.trim());
+    return id;
+  });
+
+  // 2. Separate markdown images: ![alt](url)
+  const images = [];
+  placeholderText = placeholderText.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
+    const id = `__IMAGE_${images.length}__`;
+    images.push({ alt, url });
+    return id;
+  });
+
+  // 3. Helper to escape HTML for security against XSS
+  const escapeHtml = (str) => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   };
 
-  while ((match = imgRegex.exec(text)) !== null) {
-    const textBefore = text.substring(lastIndex, match.index);
-    appendText(textBefore);
-    
-    const altText = match[1];
-    const imgUrl = match[2];
-    
-    const imgWrapper = document.createElement('div');
-    imgWrapper.classList.add('chat-image-wrapper');
-    
-    const img = document.createElement('img');
-    img.src = imgUrl;
-    img.alt = altText;
-    img.loading = 'lazy';
-    
-    img.onload = () => scrollToBottom();
-    img.onerror = () => {
-      img.style.display = 'none';
-      const errMsg = document.createElement('div');
-      errMsg.textContent = '⚠️ Failed to load image';
-      errMsg.style.padding = '10px';
-      errMsg.style.fontSize = '0.82rem';
-      errMsg.style.color = '#f43f5e';
-      imgWrapper.appendChild(errMsg);
-    };
+  let formatted = escapeHtml(placeholderText);
 
-    imgWrapper.appendChild(img);
-    container.appendChild(imgWrapper);
-    
-    lastIndex = imgRegex.lastIndex;
-  }
-  
-  const textAfter = text.substring(lastIndex);
-  appendText(textAfter);
+  // 4. Parse headers
+  formatted = formatted.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+  formatted = formatted.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+  formatted = formatted.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+
+  // 5. Parse bold & italic
+  formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+  // 6. Parse inline code: `code`
+  formatted = formatted.replace(/`(.*?)`/g, '<code>$1</code>');
+
+  // 7. Parse lists
+  formatted = formatted.replace(/(?:^|\n)[-*] (.*?)(?=\n|$)/g, '<li>$1</li>');
+  formatted = formatted.replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
+
+  // 8. Handle paragraphs/newlines
+  const lines = formatted.split('\n');
+  const processedLines = lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('<h') || trimmed.startsWith('<ul') || trimmed.startsWith('<li') || trimmed.startsWith('</ul') || trimmed.startsWith('</li') || trimmed.startsWith('__')) {
+      return line;
+    }
+    return `<p>${line}</p>`;
+  });
+  formatted = processedLines.join('\n');
+
+  // 9. Re-insert images
+  images.forEach((img, index) => {
+    const placeholder = `__IMAGE_${index}__`;
+    const html = `
+      <div class="chat-image-wrapper">
+        <img src="${img.url}" alt="${img.alt}" loading="lazy" onload="scrollToBottom()" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+        <div style="display:none; padding:10px; font-size:0.82rem; color:#f43f5e;">⚠️ Failed to load image</div>
+      </div>
+    `;
+    formatted = formatted.replace(placeholder, html);
+  });
+
+  // 10. Re-insert code blocks with syntax wrapper and copy button
+  codeBlocks.forEach((code, index) => {
+    const placeholder = `__CODE_BLOCK_${index}__`;
+    const escapedCode = escapeHtml(code);
+    const html = `
+      <div class="chat-code-wrapper" style="margin-top: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 8px; border: 1px solid var(--glass-border); overflow: hidden; font-family: monospace; font-size: 0.88rem; line-height: 1.5;">
+        <div style="background: rgba(255, 255, 255, 0.05); padding: 6px 12px; font-size: 0.75rem; color: var(--clr-text-secondary); border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center;">
+          <span>Code</span>
+          <button onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.textContent); showToast('Code copied!', 'success');" style="background: transparent; border: none; color: var(--clr-accent-secondary); cursor: pointer; font-family: var(--font-primary); font-size: 0.72rem; outline: none;">Copy</button>
+        </div>
+        <pre style="margin: 0; padding: 12px; overflow-x: auto; white-space: pre;"><code style="background: transparent; padding: 0; border: none; color: #f3f4f6;">${escapedCode}</code></pre>
+      </div>
+    `;
+    formatted = formatted.replace(placeholder, html);
+  });
+
+  container.innerHTML = formatted;
 }
 
 async function fetchGeminiResponse(userText, companion, lang) {
