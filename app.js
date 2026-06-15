@@ -542,7 +542,8 @@ const state = {
   voiceMode: false,
   speakerOn: true,
   conversations: {},
-  sessionCount: 0
+  sessionCount: 0,
+  apiKey: ''
 };
 
 // ═══════════════════════════════════════
@@ -574,7 +575,10 @@ const dom = {
   particles: $('#particles'),
   statMessages: $('#statMessages'),
   statConversations: $('#statConversations'),
-  statStorage: $('#statStorage')
+  statStorage: $('#statStorage'),
+  geminiApiKey: $('#geminiApiKey'),
+  saveApiKeyBtn: $('#saveApiKeyBtn'),
+  apiKeyStatus: $('#apiKeyStatus')
 };
 
 // ═══════════════════════════════════════
@@ -586,6 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initParticles();
   bindEvents();
   switchCompanion('ananya');
+  updateApiKeyStatus();
 });
 
 function loadState() {
@@ -600,6 +605,7 @@ function loadState() {
     } else {
       state.sessionCount = 1;
     }
+    state.apiKey = localStorage.getItem('hola_gemini_api_key') || '';
     saveState();
   } catch (e) {
     console.warn('Could not load state:', e);
@@ -614,6 +620,9 @@ function saveState() {
       currentLang: state.currentLang,
       speakerOn: state.speakerOn
     }));
+    if (state.apiKey !== undefined) {
+      localStorage.setItem('hola_gemini_api_key', state.apiKey);
+    }
   } catch (e) {
     console.warn('Could not save state:', e);
   }
@@ -718,6 +727,21 @@ function bindEvents() {
   // Sidebar footer shortcuts
   $('#exportBtn').addEventListener('click', () => exportChat('json'));
   $('#clearAllBtn').addEventListener('click', deleteAllChats);
+
+  // Gemini API Key event
+  if (dom.saveApiKeyBtn) {
+    dom.saveApiKeyBtn.addEventListener('click', () => {
+      const key = dom.geminiApiKey.value.trim();
+      state.apiKey = key;
+      saveState();
+      updateApiKeyStatus();
+      if (key) {
+        showToast('Gemini API Key saved successfully!', 'success');
+      } else {
+        showToast('API Key cleared. Switched to offline mode.', 'info');
+      }
+    });
+  }
 }
 
 function closeMobileSidebar() {
@@ -796,10 +820,29 @@ function sendMessage() {
 
   // Generate AI response with realistic delay
   const delay = 800 + Math.random() * 1200;
-  setTimeout(() => {
+  setTimeout(async () => {
     showTyping(false);
 
-    const response = generateResponse(text, companion, state.currentLang);
+    let response;
+    
+    if (state.apiKey) {
+      try {
+        response = await fetchGeminiResponse(text, companion, state.currentLang);
+      } catch (err) {
+        console.warn('Gemini API error, falling back to local simulation:', err);
+        response = generateResponse(text, companion, state.currentLang);
+        showToast('Gemini API failed. Used offline reply.', 'error');
+      }
+    } else {
+      response = generateResponse(text, companion, state.currentLang);
+      
+      // Offline fallback image keyword check
+      const lower = text.toLowerCase();
+      if (lower.includes('photo') || lower.includes('image') || lower.includes('pic') || lower.includes('படம்') || lower.includes('வரைபடம்')) {
+        response += `\n\n![nature](https://image.pollinations.ai/prompt/beautiful%20calming%20scenery%20nature%20zen?width=512&height=512&nologo=true&seed=${Math.floor(Math.random()*10000)})`;
+      }
+    }
+
     const respTime = getTimeString();
 
     state.conversations[key].push({ text: response, type: 'ai', time: respTime });
@@ -808,7 +851,9 @@ function sendMessage() {
 
     // Speak response if speaker is on
     if (state.speakerOn) {
-      speakText(response);
+      // Clean up markdown image tag from speech
+      const speechText = response.replace(/!\[.*?\]\(.*?\)/g, '').trim();
+      if (speechText) speakText(speechText);
     }
   }, delay);
 }
@@ -834,7 +879,9 @@ function renderMessage(text, type, time, animate) {
 
   const bubble = document.createElement('div');
   bubble.classList.add('message-bubble');
-  bubble.textContent = text;
+  
+  // Render text and optional images
+  formatMessageText(text, bubble);
 
   const timeSpan = document.createElement('span');
   timeSpan.classList.add('message-time');
@@ -846,6 +893,142 @@ function renderMessage(text, type, time, animate) {
   dom.chatMessages.appendChild(msgDiv);
 
   scrollToBottom();
+}
+
+function formatMessageText(text, container) {
+  const imgRegex = /!\[(.*?)\]\((.*?)\)/g;
+  let lastIndex = 0;
+  let match;
+  
+  const appendText = (txt) => {
+    if (txt) {
+      const textSpan = document.createElement('span');
+      textSpan.innerHTML = txt.replace(/\n/g, '<br>');
+      container.appendChild(textSpan);
+    }
+  };
+
+  while ((match = imgRegex.exec(text)) !== null) {
+    const textBefore = text.substring(lastIndex, match.index);
+    appendText(textBefore);
+    
+    const altText = match[1];
+    const imgUrl = match[2];
+    
+    const imgWrapper = document.createElement('div');
+    imgWrapper.classList.add('chat-image-wrapper');
+    
+    const img = document.createElement('img');
+    img.src = imgUrl;
+    img.alt = altText;
+    img.loading = 'lazy';
+    
+    img.onload = () => scrollToBottom();
+    img.onerror = () => {
+      img.style.display = 'none';
+      const errMsg = document.createElement('div');
+      errMsg.textContent = '⚠️ Failed to load image';
+      errMsg.style.padding = '10px';
+      errMsg.style.fontSize = '0.82rem';
+      errMsg.style.color = '#f43f5e';
+      imgWrapper.appendChild(errMsg);
+    };
+
+    imgWrapper.appendChild(img);
+    container.appendChild(imgWrapper);
+    
+    lastIndex = imgRegex.lastIndex;
+  }
+  
+  const textAfter = text.substring(lastIndex);
+  appendText(textAfter);
+}
+
+async function fetchGeminiResponse(userText, companion, lang) {
+  const systemPrompts = {
+    friendly_listener: "You are Ananya, a warm, friendly listener. You are empathetic, compassionate, and excel at active listening. Keep your responses conversational, supportive, and relatively concise (1-3 sentences).",
+    creative_thinker: "You are Kavin, a creative thinker and witty friend. You are fun, artistic, energetic, and love sharing random fun facts, playing word games, or telling riddles. Keep your responses creative and brief (1-3 sentences).",
+    calm_mentor: "You are Adithya, a calm mentor and mindfulness guide. You are peaceful, reflective, and offer calming advice, breathing exercises, and philosophical insights. Keep your responses peaceful and concise (1-3 sentences)."
+  };
+
+  const langInstructions = {
+    tamil: "You MUST write your entire response ONLY in native Tamil language using Tamil script. Do not use English script.",
+    tanglish: "You MUST write your response in Tanglish (Tamil words written in English Latin script, casually mixed with English words, like: 'Hey friend, innaiku unga day epdi poguthu? Vanga pesalaam'). Keep the tone natural, modern, and friendly.",
+    english: "You MUST write your response in English."
+  };
+
+  const imageInstruction = "If the user asks you to show, generate, send, or display a photo/image/drawing, you MUST generate it by including a markdown image tag in your response. The format MUST be: `![description](https://image.pollinations.ai/prompt/URL_ENCODED_DESCRIPTION?width=512&height=512&nologo=true&seed=RANDOM)` where URL_ENCODED_DESCRIPTION is a detailed, English description of the image the user wants (URL-encoded) and RANDOM is a random number to avoid caching. For example: `![sunset](https://image.pollinations.ai/prompt/beautiful%20beach%20sunset?width=512&height=512&nologo=true&seed=4832)`. Do not write anything else inside the image markdown link.";
+
+  const systemPrompt = `${systemPrompts[companion.personality] || systemPrompts.friendly_listener} ${langInstructions[lang] || langInstructions.english} ${imageInstruction} Always stay in character. Do not break character.`;
+
+  const key = `${state.currentCompanion}_${state.currentLang}`;
+  const history = state.conversations[key] || [];
+  
+  const contents = [];
+  let lastRole = null;
+  
+  for (let i = Math.max(0, history.length - 10); i < history.length; i++) {
+    const msg = history[i];
+    const role = msg.type === 'user' ? 'user' : 'model';
+    if (role !== lastRole) {
+      const cleanText = msg.text.replace(/!\[.*?\]\(.*?\)/g, '').trim();
+      if (cleanText) {
+        contents.push({
+          role: role,
+          parts: [{ text: cleanText }]
+        });
+        lastRole = role;
+      }
+    }
+  }
+  
+  if (contents.length === 0 || contents[contents.length - 1].role !== 'user') {
+    contents.push({
+      role: 'user',
+      parts: [{ text: userText }]
+    });
+  } else {
+    contents[contents.length - 1].parts[0].text = userText;
+  }
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: contents,
+      systemInstruction: {
+        parts: [{ text: systemPrompt }]
+      },
+      generationConfig: {
+        maxOutputTokens: 300,
+        temperature: 0.7
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API returned status ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+    return data.candidates[0].content.parts[0].text.trim();
+  } else {
+    throw new Error("Invalid response structure from Gemini API");
+  }
+}
+
+function updateApiKeyStatus() {
+  if (!dom.apiKeyStatus) return;
+  if (state.apiKey) {
+    dom.apiKeyStatus.textContent = 'Mode: Real AI (Gemini 1.5 Flash) Active';
+    dom.apiKeyStatus.className = 'api-key-status active';
+  } else {
+    dom.apiKeyStatus.textContent = 'Mode: Offline keyword rules (No API key)';
+    dom.apiKeyStatus.className = 'api-key-status inactive';
+  }
 }
 
 function scrollToBottom() {
@@ -1043,6 +1226,8 @@ if (window.speechSynthesis) {
 
 function openPrivacyModal() {
   updatePrivacyStats();
+  if (dom.geminiApiKey) dom.geminiApiKey.value = state.apiKey;
+  updateApiKeyStatus();
   dom.privacyModal.classList.add('visible');
 }
 
